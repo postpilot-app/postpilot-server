@@ -1,0 +1,50 @@
+app:
+  name: postpilot-server
+  mode: "self"  # "self" = 自用模式, "multi" = 多用户模式
+  port: 8089
+  env: dev      # dev | prod
+  api_key: ""   # self 模式 API 访问密钥，从环境变量 POSTPILOT_API_KEY 读取。为空则不验证(仅限本地开发)
+
+database:
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: walker123
+  dbname: postpilot
+  charset: utf8mb4
+
+# AI 配置: Gemini 主力 → Claude 兜底 (与 zsport-crawler 一致)
+ai:
+  default_provider: gemini
+  gemini:
+    api_key: ""    # 从环境变量 GEMINI_API_KEY 读取
+    models:        # 按优先级，前面的挂了自动试下一个
+      - "gemini-2.5-flash"
+      - "gemini-2.5-pro"
+  claude:
+    api_key: ""    # 从环境变量 ANTHROPIC_API_KEY 读取 (Gemini 全挂时自动切换)
+    models:
+      - "claude-haiku-4-5-20251001"
+      - "claude-sonnet-4-6"
+
+# S3 图片存储
+s3:
+  region: ap-southeast-1
+  bucket: postpilot-media
+  access_key: ""
+  secret_key: ""
+  cdn_url: ""  # 可选 CDN 域名
+
+# 自用模式下的 Meta 平台授权 (多用户模式从数据库读取)
+meta:
+  app_id: ""
+  app_secret: ""
+  redirect_uri: "http://localhost:8089/api/v1/auth/meta/callback"
+
+# 多用户模式配置
+auth:
+  jwt_secret: "change-me-in-production"
+  token_expire: "168h"  # 7 days
+
+encryption:
+  aes_key: ""  # AES-256 key, 从环境变量 POSTPILOT_AES_KEY 读取
