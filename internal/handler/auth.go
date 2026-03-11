@@ -46,6 +46,7 @@ type MetaTokens struct {
 func (h *AuthHandler) SessionAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if h.SessionToken == "" {
+			log.Printf("[SessionAuth] no session token on server (not connected yet)")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "not_authorized", "message": "请先连接 Facebook 账号"})
 			c.Abort()
 			return
@@ -53,6 +54,7 @@ func (h *AuthHandler) SessionAuthMiddleware() gin.HandlerFunc {
 		auth := c.GetHeader("Authorization")
 		token := strings.TrimPrefix(auth, "Bearer ")
 		if token == "" || token != h.SessionToken {
+			log.Printf("[SessionAuth] mismatch: received=%q, expected=%q", token, h.SessionToken[:8]+"...")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_session", "message": "会话无效，请重新连接"})
 			c.Abort()
 			return
