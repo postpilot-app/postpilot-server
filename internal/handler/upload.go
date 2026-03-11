@@ -1,18 +1,23 @@
 package handler
 
 import (
+	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/postpilot-dev/postpilot-server/internal/model"
 	"github.com/postpilot-dev/postpilot-server/internal/service/storage"
+	"gorm.io/gorm"
 )
 
 type UploadHandler struct {
 	storage *storage.S3Service
+	db      *gorm.DB
 }
 
-func NewUploadHandler(s *storage.S3Service) *UploadHandler {
-	return &UploadHandler{storage: s}
+func NewUploadHandler(s *storage.S3Service, db *gorm.DB) *UploadHandler {
+	return &UploadHandler{storage: s, db: db}
 }
 
 // Upload handles single/multiple image uploads to S3
@@ -39,18 +44,38 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 	}
 
 	var urls []string
+	var keys []string
 	for _, file := range files {
-		url, err := h.storage.UploadFile(c.Request.Context(), file)
+		url, key, err := h.storage.UploadFileReturnKey(c.Request.Context(), file)
 		if err != nil {
+			// Clean up already uploaded files on failure
+			if len(keys) > 0 {
+				_ = h.storage.DeleteFiles(c.Request.Context(), keys)
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "upload failed: " + err.Error()})
 			return
 		}
 		urls = append(urls, url)
+		keys = append(keys, key)
+	}
+
+	// Create Post record (draft)
+	urlsJSON, _ := json.Marshal(urls)
+	keysJSON, _ := json.Marshal(keys)
+	post := model.Post{
+		UserID:    0, // self mode
+		Status:    "draft",
+		MediaURLs: string(urlsJSON),
+		MediaKeys: string(keysJSON),
+	}
+	if err := h.db.Create(&post).Error; err != nil {
+		log.Printf("[Upload] create post record: %v", err)
 	}
 
 	resp := gin.H{
-		"urls":  urls,
-		"count": len(urls),
+		"urls":    urls,
+		"count":   len(urls),
+		"post_id": post.ID,
 	}
 	if len(urls) == 1 {
 		resp["url"] = urls[0]

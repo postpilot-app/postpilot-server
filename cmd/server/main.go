@@ -41,6 +41,7 @@ func main() {
 		&model.User{},
 		&model.UserAIKey{},
 		&model.PlatformAccount{},
+		&model.Post{},
 		&model.PublishRecord{},
 		&model.PublishDetail{},
 	); err != nil {
@@ -73,9 +74,10 @@ func main() {
 	go watchAndRegisterPublishers(authHandler, publisherService, metaClient)
 
 	// 初始化 handlers
-	uploadHandler := handler.NewUploadHandler(s3Service)
+	uploadHandler := handler.NewUploadHandler(s3Service, db)
 	aiHandler := handler.NewAIHandler(aiService)
 	publishHandler := handler.NewPublishHandler(publisherService)
+	postHandler := handler.NewPostHandler(db, s3Service)
 
 	// 设置 Gin
 	if cfg.App.Env == "prod" {
@@ -87,7 +89,16 @@ func main() {
 	engine.Use(corsMiddleware())
 
 	// 注册路由
-	router := handler.NewRouter(cfg, uploadHandler, aiHandler, publishHandler, authHandler)
+	router := handler.NewRouter(cfg, uploadHandler, aiHandler, publishHandler, authHandler, postHandler)
+
+	// 定时清理过期草稿 (24小时未发布的自动删除)
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			postHandler.CleanupDrafts(24 * time.Hour)
+		}
+	}()
 	router.Setup(engine)
 
 	// 启动服务

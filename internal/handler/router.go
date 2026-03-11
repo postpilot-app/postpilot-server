@@ -12,15 +12,17 @@ type Router struct {
 	ai      *AIHandler
 	publish *PublishHandler
 	auth    *AuthHandler
+	post    *PostHandler
 }
 
-func NewRouter(cfg *config.Config, upload *UploadHandler, ai *AIHandler, publish *PublishHandler, auth *AuthHandler) *Router {
+func NewRouter(cfg *config.Config, upload *UploadHandler, ai *AIHandler, publish *PublishHandler, auth *AuthHandler, post *PostHandler) *Router {
 	return &Router{
 		cfg:     cfg,
 		upload:  upload,
 		ai:      ai,
 		publish: publish,
 		auth:    auth,
+		post:    post,
 	}
 }
 
@@ -56,6 +58,8 @@ func (r *Router) Setup(engine *gin.Engine) {
 			business.POST("/upload", r.upload.Upload)
 			business.POST("/ai/generate", r.ai.Generate)
 			business.POST("/publish", r.publish.Publish)
+			business.GET("/posts", r.post.ListPosts)
+			business.DELETE("/posts/:id", r.post.DeletePost)
 		}
 	}
 }

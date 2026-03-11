@@ -90,3 +90,68 @@ func (s *S3Service) UploadFile(ctx context.Context, file *multipart.FileHeader) 
 
 	return presignedURL.URL, nil
 }
+
+// UploadFileReturnKey uploads a file and returns both the presigned URL and the S3 key
+func (s *S3Service) UploadFileReturnKey(ctx context.Context, file *multipart.FileHeader) (url, key string, err error) {
+	src, err := file.Open()
+	if err != nil {
+		return "", "", fmt.Errorf("open file: %w", err)
+	}
+	defer src.Close()
+
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	key = fmt.Sprintf("uploads/%s/%s%s",
+		time.Now().Format("2006/01/02"),
+		xid.New().String(),
+		ext,
+	)
+
+	contentType := "image/jpeg"
+	switch ext {
+	case ".png":
+		contentType = "image/png"
+	case ".webp":
+		contentType = "image/webp"
+	case ".gif":
+		contentType = "image/gif"
+	}
+
+	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      &s.bucket,
+		Key:         &key,
+		Body:        src,
+		ContentType: &contentType,
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("s3 put object: %w", err)
+	}
+
+	presignedURL, err := s.presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: &s.bucket,
+		Key:    &key,
+	}, s3.WithPresignExpires(1*time.Hour))
+	if err != nil {
+		return "", "", fmt.Errorf("presign get object: %w", err)
+	}
+
+	return presignedURL.URL, key, nil
+}
+
+// DeleteFile deletes a single file from S3 by key
+func (s *S3Service) DeleteFile(ctx context.Context, key string) error {
+	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: &s.bucket,
+		Key:    &key,
+	})
+	return err
+}
+
+// DeleteFiles deletes multiple files from S3
+func (s *S3Service) DeleteFiles(ctx context.Context, keys []string) error {
+	for _, key := range keys {
+		if err := s.DeleteFile(ctx, key); err != nil {
+			return fmt.Errorf("delete %s: %w", key, err)
+		}
+	}
+	return nil
+}

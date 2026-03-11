@@ -42,6 +42,23 @@ type PlatformAccount struct {
 	UpdatedAt             time.Time `json:"updated_at"`
 }
 
+// Post 帖子记录表 — 从上传开始追踪完整生命周期
+type Post struct {
+	ID               int64           `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID           int64           `gorm:"not null;index" json:"user_id"`
+	Status           string          `gorm:"size:20;default:draft;index" json:"status"` // draft, published, failed
+	MediaURLs        string          `gorm:"type:json" json:"media_urls"`               // S3 presigned URLs
+	MediaKeys        string          `gorm:"type:json" json:"media_keys"`               // S3 object keys (for deletion)
+	Captions         string          `gorm:"type:json" json:"captions,omitempty"`        // generated captions JSON
+	Hashtags         string          `gorm:"type:json" json:"hashtags,omitempty"`
+	AIProvider       string          `gorm:"size:20" json:"ai_provider,omitempty"`
+	Platforms        string          `gorm:"type:json" json:"platforms,omitempty"` // target platforms
+	PublishResults   string          `gorm:"type:json" json:"publish_results,omitempty"`
+	PublishedAt      *time.Time      `json:"published_at,omitempty"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+}
+
 // PublishRecord 发布记录表
 type PublishRecord struct {
 	ID               int64            `gorm:"primaryKey;autoIncrement" json:"id"`
