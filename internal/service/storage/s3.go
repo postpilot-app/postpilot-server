@@ -16,10 +16,11 @@ import (
 )
 
 type S3Service struct {
-	client *s3.Client
-	bucket string
-	cdnURL string
-	region string
+	client        *s3.Client
+	presignClient *s3.PresignClient
+	bucket        string
+	cdnURL        string
+	region        string
 }
 
 func NewS3Service(cfg config.S3Config) (*S3Service, error) {
@@ -33,15 +34,18 @@ func NewS3Service(cfg config.S3Config) (*S3Service, error) {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
 
+	client := s3.NewFromConfig(awsCfg)
+
 	return &S3Service{
-		client: s3.NewFromConfig(awsCfg),
-		bucket: cfg.Bucket,
-		cdnURL: cfg.CDNURL,
-		region: cfg.Region,
+		client:        client,
+		presignClient: s3.NewPresignClient(client),
+		bucket:        cfg.Bucket,
+		cdnURL:        cfg.CDNURL,
+		region:        cfg.Region,
 	}, nil
 }
 
-// UploadFile uploads a multipart file to S3 and returns the public URL
+// UploadFile uploads a multipart file to S3 and returns a presigned URL (1 hour expiry)
 func (s *S3Service) UploadFile(ctx context.Context, file *multipart.FileHeader) (string, error) {
 	src, err := file.Open()
 	if err != nil {
@@ -76,8 +80,13 @@ func (s *S3Service) UploadFile(ctx context.Context, file *multipart.FileHeader) 
 		return "", fmt.Errorf("s3 put object: %w", err)
 	}
 
-	if s.cdnURL != "" {
-		return fmt.Sprintf("%s/%s", strings.TrimRight(s.cdnURL, "/"), key), nil
+	presignedURL, err := s.presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: &s.bucket,
+		Key:    &key,
+	}, s3.WithPresignExpires(1*time.Hour))
+	if err != nil {
+		return "", fmt.Errorf("presign get object: %w", err)
 	}
-	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", s.bucket, s.region, key), nil
+
+	return presignedURL.URL, nil
 }
