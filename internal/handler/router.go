@@ -46,6 +46,7 @@ func (r *Router) Setup(engine *gin.Engine) {
 			protected.POST("/publish", r.publish.Publish)
 			protected.POST("/auth/meta/connect", r.auth.MetaConnect)
 			protected.GET("/auth/meta/status", r.auth.MetaStatus)
+			protected.POST("/auth/meta/disconnect", r.auth.MetaDisconnect)
 		}
 
 		// OAuth 回调 (浏览器跳转，也需要验证但支持 query param)

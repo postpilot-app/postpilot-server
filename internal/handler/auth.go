@@ -365,6 +365,29 @@ func (h *AuthHandler) MetaStatus(c *gin.Context) {
 	})
 }
 
+// MetaDisconnect revokes all permissions and clears tokens
+// POST /api/v1/auth/meta/disconnect
+func (h *AuthHandler) MetaDisconnect(c *gin.Context) {
+	ctx := c.Request.Context()
+	if h.Tokens.UserToken != "" {
+		// Revoke all permissions via Graph API
+		params := url.Values{"access_token": {h.Tokens.UserToken}}
+		_, err := h.client.GraphDelete(ctx, "/me/permissions", params)
+		if err != nil {
+			log.Printf("[Auth/Disconnect] revoke permissions: %v", err)
+		} else {
+			log.Printf("[Auth/Disconnect] permissions revoked")
+		}
+	}
+	// Clear in-memory tokens
+	h.Tokens = &MetaTokens{}
+	// Clear DB records
+	if err := h.db.Where("user_id = ?", 0).Delete(&model.PlatformAccount{}).Error; err != nil {
+		log.Printf("[Auth/Disconnect] clear DB: %v", err)
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "disconnected"})
+}
+
 func (h *AuthHandler) exchangeCode(code string) (string, error) {
 	params := url.Values{
 		"client_id":     {h.cfg.Meta.AppID},

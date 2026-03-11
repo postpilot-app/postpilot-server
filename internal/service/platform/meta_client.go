@@ -35,6 +35,16 @@ func (m *MetaClient) graphGet(ctx context.Context, path string, params url.Value
 	return m.doJSON(req)
 }
 
+// GraphDelete performs a DELETE request to Meta Graph API
+func (m *MetaClient) GraphDelete(ctx context.Context, path string, params url.Values) (map[string]interface{}, error) {
+	reqURL := fmt.Sprintf("%s%s?%s", metaGraphBaseURL, path, params.Encode())
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	return m.doJSON(req)
+}
+
 // graphPost performs a POST request to Meta Graph API
 func (m *MetaClient) graphPost(ctx context.Context, path string, params url.Values) (map[string]interface{}, error) {
 	reqURL := fmt.Sprintf("%s%s", metaGraphBaseURL, path)
