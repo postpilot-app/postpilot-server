@@ -147,6 +147,14 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 		log.Printf("[Auth/Connect] user: %s (id: %s)", profile.Name, profile.ID)
 	}
 
+	// Debug: check token permissions
+	perms, permErr := h.client.GetTokenPermissions(ctx, longToken)
+	if permErr != nil {
+		log.Printf("[Auth/Connect] check permissions failed: %v", permErr)
+	} else {
+		log.Printf("[Auth/Connect] granted permissions: %v", perms)
+	}
+
 	// Step 3: Get user's Facebook Pages
 	h.Tokens.UserToken = longToken
 	pages, err := h.client.GetUserPages(ctx, longToken)

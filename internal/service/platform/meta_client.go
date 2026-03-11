@@ -189,6 +189,32 @@ type UserProfile struct {
 	PictureURL string `json:"picture_url"`
 }
 
+// GetTokenPermissions returns the list of granted permissions for a token
+func (m *MetaClient) GetTokenPermissions(ctx context.Context, token string) ([]string, error) {
+	params := url.Values{"access_token": {token}}
+	data, err := m.graphGet(ctx, "/me/permissions", params)
+	if err != nil {
+		return nil, err
+	}
+	permsData, ok := data["data"].([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected permissions response")
+	}
+	var granted []string
+	for _, p := range permsData {
+		pm, ok := p.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if pm["status"] == "granted" {
+			if name, ok := pm["permission"].(string); ok {
+				granted = append(granted, name)
+			}
+		}
+	}
+	return granted, nil
+}
+
 // PageInfo represents a Facebook Page
 type PageInfo struct {
 	ID          string `json:"id"`
