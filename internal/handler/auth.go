@@ -148,43 +148,40 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 	}
 
 	// Step 3: Get user's Facebook Pages
+	h.Tokens.UserToken = longToken
 	pages, err := h.client.GetUserPages(ctx, longToken)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "get pages: " + err.Error()})
-		return
+		log.Printf("[Auth/Connect] get pages failed (may lack permissions): %v", err)
 	}
 
-	if len(pages) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no Facebook Pages found. You need a Facebook Page to publish."})
-		return
-	}
+	if len(pages) > 0 {
+		page := pages[0]
+		h.Tokens.PageID = page.ID
+		h.Tokens.PageName = page.Name
+		h.Tokens.PageToken = page.AccessToken
 
-	// Use first page (self mode)
-	page := pages[0]
-	h.Tokens.UserToken = longToken
-	h.Tokens.PageID = page.ID
-	h.Tokens.PageName = page.Name
-	h.Tokens.PageToken = page.AccessToken
-
-	// Save Facebook/Page account to DB
-	h.savePlatformAccount("facebook", page.Name, page.AccessToken, &tokenExpiry, map[string]string{
-		"page_id":      page.ID,
-		"user_token":   longToken,
-		"user_name":    profile.Name,
-		"user_picture": profile.PictureURL,
-	})
-
-	// Step 4: Get Instagram Business Account
-	igID, err := h.client.GetInstagramBusinessAccount(ctx, page.ID, page.AccessToken)
-	if err != nil {
-		log.Printf("[Auth/Connect] no IG business account: %v", err)
-	} else {
-		h.Tokens.IGUserID = igID
-		log.Printf("[Auth/Connect] IG business account: %s", igID)
-		h.savePlatformAccount("instagram", igID, page.AccessToken, &tokenExpiry, map[string]string{
-			"ig_user_id": igID,
-			"page_id":    page.ID,
+		// Save Facebook/Page account to DB
+		h.savePlatformAccount("facebook", page.Name, page.AccessToken, &tokenExpiry, map[string]string{
+			"page_id":      page.ID,
+			"user_token":   longToken,
+			"user_name":    profile.Name,
+			"user_picture": profile.PictureURL,
 		})
+
+		// Step 4: Get Instagram Business Account
+		igID, err := h.client.GetInstagramBusinessAccount(ctx, page.ID, page.AccessToken)
+		if err != nil {
+			log.Printf("[Auth/Connect] no IG business account: %v", err)
+		} else {
+			h.Tokens.IGUserID = igID
+			log.Printf("[Auth/Connect] IG business account: %s", igID)
+			h.savePlatformAccount("instagram", igID, page.AccessToken, &tokenExpiry, map[string]string{
+				"ig_user_id": igID,
+				"page_id":    page.ID,
+			})
+		}
+	} else {
+		log.Printf("[Auth/Connect] no pages found, skipping page/IG setup")
 	}
 
 	// Step 5: Get Threads User ID
@@ -200,12 +197,12 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 	}
 
 	log.Printf("[Auth/Connect] complete: page=%s(%s), ig=%s, threads=%s, user=%s",
-		page.Name, page.ID, h.Tokens.IGUserID, h.Tokens.ThreadsUID, h.Tokens.UserName)
+		h.Tokens.PageName, h.Tokens.PageID, h.Tokens.IGUserID, h.Tokens.ThreadsUID, h.Tokens.UserName)
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":       "connected",
-		"page":         page.Name,
-		"page_id":      page.ID,
+		"page":         h.Tokens.PageName,
+		"page_id":      h.Tokens.PageID,
 		"ig_user":      h.Tokens.IGUserID,
 		"threads":      h.Tokens.ThreadsUID,
 		"user_name":    h.Tokens.UserName,
