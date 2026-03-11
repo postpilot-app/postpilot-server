@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -110,6 +111,7 @@ func (m *MetaClient) GetUserPages(ctx context.Context, userToken string) ([]Page
 		return nil, err
 	}
 
+	log.Printf("[Meta] /me/accounts raw response: %v", result)
 	data, _ := result["data"].([]interface{})
 	var pages []PageInfo
 	for _, item := range data {
