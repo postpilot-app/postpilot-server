@@ -239,8 +239,15 @@ func (m *MetaClient) GetTokenPermissions(ctx context.Context, token string) ([]s
 	return granted, nil
 }
 
-// GetPageIDsFromToken extracts page IDs from token's granular_scopes via debug_token API
-func (m *MetaClient) GetPageIDsFromToken(ctx context.Context, userToken, appID, appSecret string) []string {
+// ScopeInfo holds IDs extracted from token's granular_scopes
+type ScopeInfo struct {
+	PageIDs   []string
+	IGUserIDs []string
+}
+
+// GetGrantedScopeInfo extracts page IDs and IG user IDs from token's granular_scopes
+func (m *MetaClient) GetGrantedScopeInfo(ctx context.Context, userToken, appID, appSecret string) *ScopeInfo {
+	info := &ScopeInfo{}
 	params := url.Values{
 		"input_token":  {userToken},
 		"access_token": {appID + "|" + appSecret},
@@ -248,50 +255,49 @@ func (m *MetaClient) GetPageIDsFromToken(ctx context.Context, userToken, appID, 
 	result, err := m.GraphGet(ctx, "/debug_token", params)
 	if err != nil {
 		log.Printf("[Meta] debug_token: %v", err)
-		return nil
+		return info
 	}
 	data, _ := result["data"].(map[string]interface{})
 	scopes, _ := data["granular_scopes"].([]interface{})
-	var pageIDs []string
 	for _, s := range scopes {
 		scope, _ := s.(map[string]interface{})
 		scopeName, _ := scope["scope"].(string)
-		if scopeName == "pages_show_list" {
-			targets, _ := scope["target_ids"].([]interface{})
-			for _, t := range targets {
-				// target_ids can be float64 or string
-				switch v := t.(type) {
-				case float64:
-					pageIDs = append(pageIDs, fmt.Sprintf("%.0f", v))
-				case string:
-					pageIDs = append(pageIDs, v)
-				}
+		targets, _ := scope["target_ids"].([]interface{})
+		var ids []string
+		for _, t := range targets {
+			switch v := t.(type) {
+			case float64:
+				ids = append(ids, fmt.Sprintf("%.0f", v))
+			case string:
+				ids = append(ids, v)
 			}
 		}
+		switch scopeName {
+		case "pages_show_list":
+			info.PageIDs = ids
+		case "instagram_basic":
+			info.IGUserIDs = ids
+		}
 	}
-	log.Printf("[Meta] debug_token page IDs: %v", pageIDs)
-	return pageIDs
+	log.Printf("[Meta] granular_scopes: pages=%v, ig=%v", info.PageIDs, info.IGUserIDs)
+	return info
 }
 
-// GetPageInfo gets page name and access_token by page ID
-func (m *MetaClient) GetPageInfo(ctx context.Context, pageID, userToken string) (*PageInfo, error) {
+// GetIGUsername gets the Instagram username for a business account ID
+func (m *MetaClient) GetIGUsername(ctx context.Context, igUserID, token string) (string, error) {
 	params := url.Values{
-		"access_token": {userToken},
-		"fields":       {"id,name,access_token"},
+		"access_token": {token},
+		"fields":       {"username"},
 	}
-	result, err := m.GraphGet(ctx, "/"+pageID, params)
+	result, err := m.GraphGet(ctx, "/"+igUserID, params)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	info := &PageInfo{
-		ID:   fmt.Sprintf("%v", result["id"]),
-		Name: fmt.Sprintf("%v", result["name"]),
+	username, _ := result["username"].(string)
+	if username == "" {
+		return igUserID, nil
 	}
-	if token, ok := result["access_token"].(string); ok {
-		info.AccessToken = token
-	}
-	log.Printf("[Meta] GetPageInfo: id=%s, name=%s, hasToken=%v", info.ID, info.Name, info.AccessToken != "")
-	return info, nil
+	return "@" + username, nil
 }
 
 // PageInfo represents a Facebook Page

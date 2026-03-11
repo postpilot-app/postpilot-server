@@ -155,28 +155,16 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 		log.Printf("[Auth/Connect] granted permissions: %v", perms)
 	}
 
-	// Step 3: Get user's Facebook Pages
+	// Step 3: Get user's Facebook Pages and Instagram
 	h.Tokens.UserToken = longToken
 
-	// Try /me/accounts first
+	// Extract all IDs from token's granular_scopes (most reliable method)
+	scopeInfo := h.client.GetGrantedScopeInfo(ctx, longToken, h.cfg.Meta.AppID, h.cfg.Meta.AppSecret)
+
+	// Try /me/accounts first for page info with access_token
 	pages, err := h.client.GetUserPages(ctx, longToken)
 	if err != nil {
 		log.Printf("[Auth/Connect] get pages failed: %v", err)
-	}
-
-	// Fallback: extract page IDs from token's granular_scopes via debug_token
-	if len(pages) == 0 {
-		log.Printf("[Auth/Connect] /me/accounts empty, trying debug_token fallback")
-		pageIDs := h.client.GetPageIDsFromToken(ctx, longToken, h.cfg.Meta.AppID, h.cfg.Meta.AppSecret)
-		for _, pid := range pageIDs {
-			// Get page info directly by ID
-			pageInfo, pageErr := h.client.GetPageInfo(ctx, pid, longToken)
-			if pageErr != nil {
-				log.Printf("[Auth/Connect] get page %s info: %v", pid, pageErr)
-				continue
-			}
-			pages = append(pages, *pageInfo)
-		}
 	}
 
 	if len(pages) > 0 {
@@ -184,30 +172,58 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 		h.Tokens.PageID = page.ID
 		h.Tokens.PageName = page.Name
 		h.Tokens.PageToken = page.AccessToken
-		if page.AccessToken == "" {
-			// Use user token as fallback for page operations
-			h.Tokens.PageToken = longToken
-		}
+	} else if len(scopeInfo.PageIDs) > 0 {
+		// Fallback: use page ID from granular_scopes
+		h.Tokens.PageID = scopeInfo.PageIDs[0]
+		h.Tokens.PageToken = longToken // use user token as fallback
+		log.Printf("[Auth/Connect] using page ID from granular_scopes: %s", h.Tokens.PageID)
+	}
 
+	if h.Tokens.PageID != "" {
 		// Save Facebook/Page account to DB
-		h.savePlatformAccount("facebook", page.Name, h.Tokens.PageToken, &tokenExpiry, map[string]string{
-			"page_id":      page.ID,
+		pageName := h.Tokens.PageName
+		if pageName == "" {
+			pageName = "Page:" + h.Tokens.PageID
+		}
+		h.Tokens.PageName = pageName
+		h.savePlatformAccount("facebook", pageName, h.Tokens.PageToken, &tokenExpiry, map[string]string{
+			"page_id":      h.Tokens.PageID,
 			"user_token":   longToken,
 			"user_name":    profile.Name,
 			"user_picture": profile.PictureURL,
 		})
 
 		// Step 4: Get Instagram Business Account
-		igID, err := h.client.GetInstagramBusinessAccount(ctx, page.ID, page.AccessToken)
-		if err != nil {
-			log.Printf("[Auth/Connect] no IG business account: %v", err)
-		} else {
+		// First try from granular_scopes (direct, no extra API call)
+		if len(scopeInfo.IGUserIDs) > 0 {
+			igID := scopeInfo.IGUserIDs[0]
 			h.Tokens.IGUserID = igID
-			log.Printf("[Auth/Connect] IG business account: %s", igID)
-			h.savePlatformAccount("instagram", igID, page.AccessToken, &tokenExpiry, map[string]string{
+			log.Printf("[Auth/Connect] IG business account (from token scopes): %s", igID)
+
+			// Try to get IG username
+			igUser, igErr := h.client.GetIGUsername(ctx, igID, longToken)
+			if igErr != nil {
+				log.Printf("[Auth/Connect] get IG username: %v", igErr)
+				igUser = igID
+			}
+			h.Tokens.IGUserID = igUser
+			h.savePlatformAccount("instagram", igUser, h.Tokens.PageToken, &tokenExpiry, map[string]string{
 				"ig_user_id": igID,
-				"page_id":    page.ID,
+				"page_id":    h.Tokens.PageID,
 			})
+		} else {
+			// Fallback: try via page API
+			igID, igErr := h.client.GetInstagramBusinessAccount(ctx, h.Tokens.PageID, h.Tokens.PageToken)
+			if igErr != nil {
+				log.Printf("[Auth/Connect] no IG business account: %v", igErr)
+			} else {
+				h.Tokens.IGUserID = igID
+				log.Printf("[Auth/Connect] IG business account: %s", igID)
+				h.savePlatformAccount("instagram", igID, h.Tokens.PageToken, &tokenExpiry, map[string]string{
+					"ig_user_id": igID,
+					"page_id":    h.Tokens.PageID,
+				})
+			}
 		}
 	} else {
 		log.Printf("[Auth/Connect] no pages found, skipping page/IG setup")
