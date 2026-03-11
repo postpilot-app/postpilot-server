@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -63,10 +63,11 @@ func (h *AuthHandler) SessionAuthMiddleware() gin.HandlerFunc {
 	}
 }
 
-func generateSessionToken() string {
-	b := make([]byte, 32)
-	rand.Read(b)
-	return hex.EncodeToString(b)
+// deriveSessionToken 从 long-lived token 派生 session token (确定性)
+// 同一个 Facebook token 重复 connect 不会改变 session token
+func deriveSessionToken(longToken string) string {
+	h := sha256.Sum256([]byte("postpilot-session:" + longToken))
+	return hex.EncodeToString(h[:])
 }
 
 func NewAuthHandler(cfg *config.Config, client *platform.MetaClient, db *gorm.DB) *AuthHandler {
@@ -276,8 +277,8 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 		})
 	}
 
-	// Generate session token
-	h.SessionToken = generateSessionToken()
+	// 从 long-lived token 派生 session token (确定性，重复 connect 不变)
+	h.SessionToken = deriveSessionToken(longToken)
 	log.Printf("[Auth/Connect] complete: page=%s(%s), ig=%s, threads=%s, user=%s, session=%s...",
 		h.Tokens.PageName, h.Tokens.PageID, h.Tokens.IGUserID, h.Tokens.ThreadsUID, h.Tokens.UserName, h.SessionToken[:8])
 
