@@ -38,23 +38,24 @@ func (r *Router) Setup(engine *gin.Engine) {
 
 	v1 := engine.Group("/api/v1")
 	{
-		// 需要认证的接口
-		protected := v1.Group("", apiAuth)
+		// 授权相关接口: 仅需 API Key (用于连接/查状态)
+		authGroup := v1.Group("/auth", apiAuth)
 		{
-			protected.POST("/upload", r.upload.Upload)
-			protected.POST("/ai/generate", r.ai.Generate)
-			protected.POST("/publish", r.publish.Publish)
-			protected.POST("/auth/meta/connect", r.auth.MetaConnect)
-			protected.GET("/auth/meta/status", r.auth.MetaStatus)
-			protected.POST("/auth/meta/disconnect", r.auth.MetaDisconnect)
-			protected.GET("/auth/meta/debug", r.auth.MetaDebug)
+			authGroup.POST("/meta/connect", r.auth.MetaConnect)
+			authGroup.GET("/meta/status", r.auth.MetaStatus)
+			authGroup.POST("/meta/disconnect", r.auth.MetaDisconnect)
+			authGroup.GET("/meta/debug", r.auth.MetaDebug)
+			authGroup.GET("/meta/login", r.auth.MetaLogin)
+			authGroup.GET("/meta/callback", r.auth.MetaCallback)
 		}
 
-		// OAuth 回调 (浏览器跳转，也需要验证但支持 query param)
-		oauthAuth := v1.Group("/auth", apiAuth)
+		// 业务接口: 需要 API Key + Session Token (Facebook 授权后获得)
+		sessionAuth := r.auth.SessionAuthMiddleware()
+		business := v1.Group("", apiAuth, sessionAuth)
 		{
-			oauthAuth.GET("/meta/login", r.auth.MetaLogin)
-			oauthAuth.GET("/meta/callback", r.auth.MetaCallback)
+			business.POST("/upload", r.upload.Upload)
+			business.POST("/ai/generate", r.ai.Generate)
+			business.POST("/publish", r.publish.Publish)
 		}
 	}
 }

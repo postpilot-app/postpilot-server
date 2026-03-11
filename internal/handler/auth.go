@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +25,8 @@ type AuthHandler struct {
 	db     *gorm.DB
 	// 自用模式下，Token 缓存在内存 (从 DB 恢复); 多用户模式后按用户查 DB
 	Tokens *MetaTokens
+	// Session token: Facebook 授权成功后生成，所有业务接口需要此 token
+	SessionToken string
 }
 
 // MetaTokens stores the resolved tokens for self mode
@@ -35,6 +40,31 @@ type MetaTokens struct {
 	// 用户非敏感信息
 	UserName     string `json:"user_name"`
 	UserPicture  string `json:"user_picture"`
+}
+
+// SessionAuthMiddleware validates the session token from Authorization header
+func (h *AuthHandler) SessionAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.SessionToken == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "not_authorized", "message": "请先连接 Facebook 账号"})
+			c.Abort()
+			return
+		}
+		auth := c.GetHeader("Authorization")
+		token := strings.TrimPrefix(auth, "Bearer ")
+		if token == "" || token != h.SessionToken {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_session", "message": "会话无效，请重新连接"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func generateSessionToken() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 func NewAuthHandler(cfg *config.Config, client *platform.MetaClient, db *gorm.DB) *AuthHandler {
@@ -66,13 +96,16 @@ func (h *AuthHandler) restoreTokensFromDB() {
 		case "facebook":
 			h.Tokens.PageToken = acc.AccessTokenEncrypted // self 模式暂不加密
 			h.Tokens.PageName = acc.AccountName
-			// 从 ExtraData 恢复 page_id, user_token, user_name, user_picture
+			// 从 ExtraData 恢复 page_id, user_token, user_name, user_picture, session_token
 			var extra map[string]string
 			if err := json.Unmarshal([]byte(acc.ExtraData), &extra); err == nil {
 				h.Tokens.PageID = extra["page_id"]
 				h.Tokens.UserToken = extra["user_token"]
 				h.Tokens.UserName = extra["user_name"]
 				h.Tokens.UserPicture = extra["user_picture"]
+				if st := extra["session_token"]; st != "" {
+					h.SessionToken = st
+				}
 			}
 		case "instagram":
 			h.Tokens.IGUserID = acc.AccountName
@@ -81,9 +114,9 @@ func (h *AuthHandler) restoreTokensFromDB() {
 		}
 	}
 
-	if h.Tokens.PageToken != "" {
-		log.Printf("[Auth] restored tokens from DB: page=%s(%s), ig=%s, threads=%s, user=%s",
-			h.Tokens.PageName, h.Tokens.PageID, h.Tokens.IGUserID, h.Tokens.ThreadsUID, h.Tokens.UserName)
+	if h.Tokens.PageToken != "" || h.SessionToken != "" {
+		log.Printf("[Auth] restored from DB: page=%s(%s), ig=%s, threads=%s, user=%s, session=%v",
+			h.Tokens.PageName, h.Tokens.PageID, h.Tokens.IGUserID, h.Tokens.ThreadsUID, h.Tokens.UserName, h.SessionToken != "")
 	}
 }
 
@@ -241,17 +274,29 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 		})
 	}
 
+	// Generate session token
+	h.SessionToken = generateSessionToken()
 	log.Printf("[Auth/Connect] complete: page=%s(%s), ig=%s, threads=%s, user=%s",
 		h.Tokens.PageName, h.Tokens.PageID, h.Tokens.IGUserID, h.Tokens.ThreadsUID, h.Tokens.UserName)
 
+	// Save session token in facebook extra_data
+	h.savePlatformAccount("facebook", h.Tokens.PageName, h.Tokens.PageToken, &tokenExpiry, map[string]string{
+		"page_id":       h.Tokens.PageID,
+		"user_token":    longToken,
+		"user_name":     profile.Name,
+		"user_picture":  profile.PictureURL,
+		"session_token": h.SessionToken,
+	})
+
 	c.JSON(http.StatusOK, gin.H{
-		"status":       "connected",
-		"page":         h.Tokens.PageName,
-		"page_id":      h.Tokens.PageID,
-		"ig_user":      h.Tokens.IGUserID,
-		"threads":      h.Tokens.ThreadsUID,
-		"user_name":    h.Tokens.UserName,
-		"user_picture": h.Tokens.UserPicture,
+		"status":        "connected",
+		"session_token": h.SessionToken,
+		"page":          h.Tokens.PageName,
+		"page_id":       h.Tokens.PageID,
+		"ig_user":       h.Tokens.IGUserID,
+		"threads":       h.Tokens.ThreadsUID,
+		"user_name":     h.Tokens.UserName,
+		"user_picture":  h.Tokens.UserPicture,
 	})
 }
 
