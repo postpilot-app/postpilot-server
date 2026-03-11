@@ -239,6 +239,61 @@ func (m *MetaClient) GetTokenPermissions(ctx context.Context, token string) ([]s
 	return granted, nil
 }
 
+// GetPageIDsFromToken extracts page IDs from token's granular_scopes via debug_token API
+func (m *MetaClient) GetPageIDsFromToken(ctx context.Context, userToken, appID, appSecret string) []string {
+	params := url.Values{
+		"input_token":  {userToken},
+		"access_token": {appID + "|" + appSecret},
+	}
+	result, err := m.GraphGet(ctx, "/debug_token", params)
+	if err != nil {
+		log.Printf("[Meta] debug_token: %v", err)
+		return nil
+	}
+	data, _ := result["data"].(map[string]interface{})
+	scopes, _ := data["granular_scopes"].([]interface{})
+	var pageIDs []string
+	for _, s := range scopes {
+		scope, _ := s.(map[string]interface{})
+		scopeName, _ := scope["scope"].(string)
+		if scopeName == "pages_show_list" {
+			targets, _ := scope["target_ids"].([]interface{})
+			for _, t := range targets {
+				// target_ids can be float64 or string
+				switch v := t.(type) {
+				case float64:
+					pageIDs = append(pageIDs, fmt.Sprintf("%.0f", v))
+				case string:
+					pageIDs = append(pageIDs, v)
+				}
+			}
+		}
+	}
+	log.Printf("[Meta] debug_token page IDs: %v", pageIDs)
+	return pageIDs
+}
+
+// GetPageInfo gets page name and access_token by page ID
+func (m *MetaClient) GetPageInfo(ctx context.Context, pageID, userToken string) (*PageInfo, error) {
+	params := url.Values{
+		"access_token": {userToken},
+		"fields":       {"id,name,access_token"},
+	}
+	result, err := m.GraphGet(ctx, "/"+pageID, params)
+	if err != nil {
+		return nil, err
+	}
+	info := &PageInfo{
+		ID:   fmt.Sprintf("%v", result["id"]),
+		Name: fmt.Sprintf("%v", result["name"]),
+	}
+	if token, ok := result["access_token"].(string); ok {
+		info.AccessToken = token
+	}
+	log.Printf("[Meta] GetPageInfo: id=%s, name=%s, hasToken=%v", info.ID, info.Name, info.AccessToken != "")
+	return info, nil
+}
+
 // PageInfo represents a Facebook Page
 type PageInfo struct {
 	ID          string `json:"id"`

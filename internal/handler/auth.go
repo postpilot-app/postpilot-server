@@ -158,14 +158,25 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 	// Step 3: Get user's Facebook Pages
 	h.Tokens.UserToken = longToken
 
-	// Debug: try /{user-id}/accounts directly
-	altParams := url.Values{"access_token": {longToken}, "fields": {"id,name,access_token"}}
-	altResult, altErr := h.client.GraphGet(ctx, "/4355854204656729/accounts", altParams)
-	log.Printf("[Auth/Connect] DEBUG /{user-id}/accounts: result=%v, err=%v", altResult, altErr)
-
+	// Try /me/accounts first
 	pages, err := h.client.GetUserPages(ctx, longToken)
 	if err != nil {
-		log.Printf("[Auth/Connect] get pages failed (may lack permissions): %v", err)
+		log.Printf("[Auth/Connect] get pages failed: %v", err)
+	}
+
+	// Fallback: extract page IDs from token's granular_scopes via debug_token
+	if len(pages) == 0 {
+		log.Printf("[Auth/Connect] /me/accounts empty, trying debug_token fallback")
+		pageIDs := h.client.GetPageIDsFromToken(ctx, longToken, h.cfg.Meta.AppID, h.cfg.Meta.AppSecret)
+		for _, pid := range pageIDs {
+			// Get page info directly by ID
+			pageInfo, pageErr := h.client.GetPageInfo(ctx, pid, longToken)
+			if pageErr != nil {
+				log.Printf("[Auth/Connect] get page %s info: %v", pid, pageErr)
+				continue
+			}
+			pages = append(pages, *pageInfo)
+		}
 	}
 
 	if len(pages) > 0 {
@@ -173,9 +184,13 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 		h.Tokens.PageID = page.ID
 		h.Tokens.PageName = page.Name
 		h.Tokens.PageToken = page.AccessToken
+		if page.AccessToken == "" {
+			// Use user token as fallback for page operations
+			h.Tokens.PageToken = longToken
+		}
 
 		// Save Facebook/Page account to DB
-		h.savePlatformAccount("facebook", page.Name, page.AccessToken, &tokenExpiry, map[string]string{
+		h.savePlatformAccount("facebook", page.Name, h.Tokens.PageToken, &tokenExpiry, map[string]string{
 			"page_id":      page.ID,
 			"user_token":   longToken,
 			"user_name":    profile.Name,
