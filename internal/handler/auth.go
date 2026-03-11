@@ -157,6 +157,18 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 
 	// Step 3: Get user's Facebook Pages
 	h.Tokens.UserToken = longToken
+
+	// Debug: also try with short token
+	shortPages, shortErr := h.client.GetUserPages(ctx, req.AccessToken)
+	if shortErr != nil {
+		log.Printf("[Auth/Connect] short token /me/accounts: err=%v", shortErr)
+	} else {
+		log.Printf("[Auth/Connect] short token /me/accounts: %d pages", len(shortPages))
+		for _, p := range shortPages {
+			log.Printf("[Auth/Connect]   page: %s (%s)", p.Name, p.ID)
+		}
+	}
+
 	pages, err := h.client.GetUserPages(ctx, longToken)
 	if err != nil {
 		log.Printf("[Auth/Connect] get pages failed (may lack permissions): %v", err)
