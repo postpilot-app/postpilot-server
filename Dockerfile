@@ -1,0 +1,16 @@
+FROM golang:1.23-alpine AS builder
+
+WORKDIR /build
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o postpilot-server ./cmd/server/
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+COPY --from=builder /build/postpilot-server .
+COPY config/config.yaml ./config.yaml
+
+EXPOSE 8089
+CMD ["./postpilot-server", "-config", "config.yaml"]
