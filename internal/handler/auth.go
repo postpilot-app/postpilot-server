@@ -371,6 +371,45 @@ func (h *AuthHandler) MetaStatus(c *gin.Context) {
 	})
 }
 
+// MetaDebug runs various Graph API calls for debugging
+// GET /api/v1/auth/meta/debug
+func (h *AuthHandler) MetaDebug(c *gin.Context) {
+	if h.Tokens.UserToken == "" {
+		c.JSON(http.StatusOK, gin.H{"error": "no user token"})
+		return
+	}
+	ctx := c.Request.Context()
+	token := h.Tokens.UserToken
+	results := gin.H{}
+
+	// 1. /me?fields=id,name,accounts
+	p1 := url.Values{"access_token": {token}, "fields": {"id,name,accounts{id,name,access_token}"}}
+	r1, e1 := h.client.GraphGet(ctx, "/me", p1)
+	results["me_with_accounts"] = fmt.Sprintf("result=%v, err=%v", r1, e1)
+
+	// 2. /me/accounts with no fields
+	p2 := url.Values{"access_token": {token}}
+	r2, e2 := h.client.GraphGet(ctx, "/me/accounts", p2)
+	results["me_accounts_no_fields"] = fmt.Sprintf("result=%v, err=%v", r2, e2)
+
+	// 3. /me/accounts?fields=id,name
+	p3 := url.Values{"access_token": {token}, "fields": {"id,name"}}
+	r3, e3 := h.client.GraphGet(ctx, "/me/accounts", p3)
+	results["me_accounts_id_name"] = fmt.Sprintf("result=%v, err=%v", r3, e3)
+
+	// 4. /me/permissions
+	p4 := url.Values{"access_token": {token}}
+	r4, e4 := h.client.GraphGet(ctx, "/me/permissions", p4)
+	results["me_permissions"] = fmt.Sprintf("result=%v, err=%v", r4, e4)
+
+	// 5. Token debug info
+	p5 := url.Values{"input_token": {token}, "access_token": {h.cfg.Meta.AppID + "|" + h.cfg.Meta.AppSecret}}
+	r5, e5 := h.client.GraphGet(ctx, "/debug_token", p5)
+	results["debug_token"] = fmt.Sprintf("result=%v, err=%v", r5, e5)
+
+	c.JSON(http.StatusOK, results)
+}
+
 // MetaDisconnect revokes all permissions and clears tokens
 // POST /api/v1/auth/meta/disconnect
 func (h *AuthHandler) MetaDisconnect(c *gin.Context) {
