@@ -278,8 +278,8 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 
 	// Generate session token
 	h.SessionToken = generateSessionToken()
-	log.Printf("[Auth/Connect] complete: page=%s(%s), ig=%s, threads=%s, user=%s",
-		h.Tokens.PageName, h.Tokens.PageID, h.Tokens.IGUserID, h.Tokens.ThreadsUID, h.Tokens.UserName)
+	log.Printf("[Auth/Connect] complete: page=%s(%s), ig=%s, threads=%s, user=%s, session=%s...",
+		h.Tokens.PageName, h.Tokens.PageID, h.Tokens.IGUserID, h.Tokens.ThreadsUID, h.Tokens.UserName, h.SessionToken[:8])
 
 	// Save session token in facebook extra_data
 	h.savePlatformAccount("facebook", h.Tokens.PageName, h.Tokens.PageToken, &tokenExpiry, map[string]string{
@@ -438,7 +438,7 @@ func (h *AuthHandler) MetaCallback(c *gin.Context) {
 // GET /api/v1/auth/meta/status
 func (h *AuthHandler) MetaStatus(c *gin.Context) {
 	connected := h.Tokens.PageToken != ""
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"connected":    connected,
 		"page_name":    h.Tokens.PageName,
 		"page_id":      h.Tokens.PageID,
@@ -446,7 +446,12 @@ func (h *AuthHandler) MetaStatus(c *gin.Context) {
 		"threads":      h.Tokens.ThreadsUID,
 		"user_name":    h.Tokens.UserName,
 		"user_picture": h.Tokens.UserPicture,
-	})
+	}
+	// 返回 session_token 以便客户端恢复 (比如 connect 响应丢失时)
+	if connected && h.SessionToken != "" {
+		resp["session_token"] = h.SessionToken
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // MetaDebug runs various Graph API calls for debugging
