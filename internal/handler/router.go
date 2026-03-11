@@ -51,9 +51,8 @@ func (r *Router) Setup(engine *gin.Engine) {
 			authGroup.GET("/meta/callback", r.auth.MetaCallback)
 		}
 
-		// 业务接口: 需要 API Key + Session Token (Facebook 授权后获得)
-		sessionAuth := r.auth.SessionAuthMiddleware()
-		business := v1.Group("", apiAuth, sessionAuth)
+		// 业务接口: Phase A 仅需 API Key; Phase B 再加 Session Token
+		business := v1.Group("", apiAuth)
 		{
 			business.POST("/upload", r.upload.Upload)
 			business.POST("/ai/generate", r.ai.Generate)
