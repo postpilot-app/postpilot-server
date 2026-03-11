@@ -25,6 +25,10 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 	}
 
 	files := form.File["images"]
+	// Also accept "file" field for single-file uploads
+	if len(files) == 0 {
+		files = form.File["file"]
+	}
 	if len(files) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no images provided"})
 		return
@@ -44,8 +48,12 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 		urls = append(urls, url)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"urls":  urls,
 		"count": len(urls),
-	})
+	}
+	if len(urls) == 1 {
+		resp["url"] = urls[0]
+	}
+	c.JSON(http.StatusOK, resp)
 }
