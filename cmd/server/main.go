@@ -64,8 +64,8 @@ func main() {
 	// 初始化发布服务
 	publisherService := service.NewPublisherService(cfg)
 
-	// 初始化 Auth handler (OAuth 回调后存储 token)
-	authHandler := handler.NewAuthHandler(cfg, metaClient)
+	// 初始化 Auth handler (OAuth 回调后存储 token, 从 DB 恢复已有授权)
+	authHandler := handler.NewAuthHandler(cfg, metaClient, db)
 
 	// 自用模式: 如果配置中有 Meta Token，可直接注册 publishers
 	// 正常流程: 用户通过 /auth/meta/login 授权后，动态注册 publishers

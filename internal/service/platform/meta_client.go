@@ -159,6 +159,36 @@ func (m *MetaClient) GetThreadsUserID(ctx context.Context, userToken string) (st
 	return id, nil
 }
 
+// GetUserProfile returns non-sensitive user info (name, picture, etc.)
+func (m *MetaClient) GetUserProfile(ctx context.Context, userToken string) (*UserProfile, error) {
+	params := url.Values{
+		"access_token": {userToken},
+		"fields":       {"id,name,picture.width(200).height(200)"},
+	}
+	result, err := m.graphGet(ctx, "/me", params)
+	if err != nil {
+		return nil, err
+	}
+	profile := &UserProfile{
+		ID:   fmt.Sprintf("%v", result["id"]),
+		Name: fmt.Sprintf("%v", result["name"]),
+	}
+	// picture 结构: {"data": {"url": "...", "is_silhouette": false}}
+	if pic, ok := result["picture"].(map[string]interface{}); ok {
+		if data, ok := pic["data"].(map[string]interface{}); ok {
+			profile.PictureURL, _ = data["url"].(string)
+		}
+	}
+	return profile, nil
+}
+
+// UserProfile represents non-sensitive Facebook user info
+type UserProfile struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	PictureURL string `json:"picture_url"`
+}
+
 // PageInfo represents a Facebook Page
 type PageInfo struct {
 	ID          string `json:"id"`

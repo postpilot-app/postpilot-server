@@ -68,6 +68,7 @@ type MetaConfig struct {
 	AppID       string `mapstructure:"app_id"`
 	AppSecret   string `mapstructure:"app_secret"`
 	RedirectURI string `mapstructure:"redirect_uri"`
+	ConfigID    string `mapstructure:"config_id"`
 }
 
 type AuthConfig struct {
@@ -125,6 +126,38 @@ func Load(configPath string) (*Config, error) {
 	if cfg.AI.Claude.APIKey == "" {
 		if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
 			cfg.AI.Claude.APIKey = key
+		}
+	}
+
+	// Meta: POSTPILOT_META_APP_ID / POSTPILOT_META_APP_SECRET
+	if cfg.Meta.AppID == "" {
+		if v := os.Getenv("POSTPILOT_META_APP_ID"); v != "" {
+			cfg.Meta.AppID = v
+		}
+	}
+	if cfg.Meta.AppSecret == "" {
+		if v := os.Getenv("POSTPILOT_META_APP_SECRET"); v != "" {
+			cfg.Meta.AppSecret = v
+		}
+	}
+	// Meta redirect_uri: 线上部署时通过环境变量覆盖 localhost 默认值
+	if v := os.Getenv("POSTPILOT_META_REDIRECT_URI"); v != "" {
+		cfg.Meta.RedirectURI = v
+	}
+	// Meta config_id: Facebook Login for Business Configuration ID
+	if v := os.Getenv("POSTPILOT_META_CONFIG_ID"); v != "" {
+		cfg.Meta.ConfigID = v
+	}
+
+	// S3: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (共用已有的 AWS 环境变量)
+	if cfg.S3.AccessKey == "" {
+		if v := os.Getenv("AWS_ACCESS_KEY_ID"); v != "" {
+			cfg.S3.AccessKey = v
+		}
+	}
+	if cfg.S3.SecretKey == "" {
+		if v := os.Getenv("AWS_SECRET_ACCESS_KEY"); v != "" {
+			cfg.S3.SecretKey = v
 		}
 	}
 

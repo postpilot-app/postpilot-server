@@ -44,6 +44,7 @@ func (r *Router) Setup(engine *gin.Engine) {
 			protected.POST("/upload", r.upload.Upload)
 			protected.POST("/ai/generate", r.ai.Generate)
 			protected.POST("/publish", r.publish.Publish)
+			protected.POST("/auth/meta/connect", r.auth.MetaConnect)
 			protected.GET("/auth/meta/status", r.auth.MetaStatus)
 		}
 
