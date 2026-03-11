@@ -63,10 +63,14 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 	urlsJSON, _ := json.Marshal(urls)
 	keysJSON, _ := json.Marshal(keys)
 	post := model.Post{
-		UserID:    0, // self mode
-		Status:    "draft",
-		MediaURLs: string(urlsJSON),
-		MediaKeys: string(keysJSON),
+		UserID:         0, // self mode
+		Status:         "draft",
+		MediaURLs:      string(urlsJSON),
+		MediaKeys:      string(keysJSON),
+		Captions:       "{}",
+		Hashtags:       "[]",
+		Platforms:      "[]",
+		PublishResults: "{}",
 	}
 	if err := h.db.Create(&post).Error; err != nil {
 		log.Printf("[Upload] create post record: %v", err)

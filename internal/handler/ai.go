@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -29,9 +30,11 @@ type GenerateRequest struct {
 func (h *AIHandler) Generate(c *gin.Context) {
 	var req GenerateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[AI/Generate] bind error: %v, content-type: %s", err, c.ContentType())
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	log.Printf("[AI/Generate] request: urls=%d, langs=%v, platforms=%v, style=%s", len(req.ImageURLs), req.Languages, req.Platforms, req.Style)
 
 	if req.Style == "" {
 		req.Style = "casual"
