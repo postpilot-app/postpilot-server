@@ -149,7 +149,7 @@ func (p *InstagramPublisher) waitForContainer(ctx context.Context, containerID s
 			"fields":       {"status_code"},
 			"access_token": {p.accessToken},
 		}
-		result, err := p.client.graphGet(ctx, "/"+containerID, params)
+		result, err := p.client.GraphGet(ctx, "/"+containerID, params)
 		if err != nil {
 			return fmt.Errorf("check container status: %w", err)
 		}

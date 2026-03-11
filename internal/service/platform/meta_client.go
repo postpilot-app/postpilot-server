@@ -25,8 +25,8 @@ func NewMetaClient() *MetaClient {
 	}
 }
 
-// graphGet performs a GET request to Meta Graph API
-func (m *MetaClient) graphGet(ctx context.Context, path string, params url.Values) (map[string]interface{}, error) {
+// GraphGet performs a GET request to Meta Graph API
+func (m *MetaClient) GraphGet(ctx context.Context, path string, params url.Values) (map[string]interface{}, error) {
 	reqURL := fmt.Sprintf("%s%s?%s", metaGraphBaseURL, path, params.Encode())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
@@ -96,7 +96,7 @@ func (m *MetaClient) ExchangeToken(ctx context.Context, appID, appSecret, shortT
 		"client_secret":     {appSecret},
 		"fb_exchange_token": {shortToken},
 	}
-	result, err := m.graphGet(ctx, "/oauth/access_token", params)
+	result, err := m.GraphGet(ctx, "/oauth/access_token", params)
 	if err != nil {
 		return "", 0, fmt.Errorf("exchange token: %w", err)
 	}
@@ -117,7 +117,7 @@ func (m *MetaClient) GetUserPages(ctx context.Context, userToken string) ([]Page
 		"access_token": {userToken},
 		"fields":       {"id,name"},
 	}
-	debugResult, debugErr := m.graphGet(ctx, "/me/accounts", debugParams)
+	debugResult, debugErr := m.GraphGet(ctx, "/me/accounts", debugParams)
 	if debugErr != nil {
 		log.Printf("[Meta] /me/accounts (no token field): err=%v", debugErr)
 	} else {
@@ -128,7 +128,7 @@ func (m *MetaClient) GetUserPages(ctx context.Context, userToken string) ([]Page
 		"access_token": {userToken},
 		"fields":       {"id,name,access_token"},
 	}
-	result, err := m.graphGet(ctx, "/me/accounts", params)
+	result, err := m.GraphGet(ctx, "/me/accounts", params)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func (m *MetaClient) GetInstagramBusinessAccount(ctx context.Context, pageID, pa
 		"access_token": {pageToken},
 		"fields":       {"instagram_business_account"},
 	}
-	result, err := m.graphGet(ctx, "/"+pageID, params)
+	result, err := m.GraphGet(ctx, "/"+pageID, params)
 	if err != nil {
 		return "", err
 	}
@@ -172,7 +172,7 @@ func (m *MetaClient) GetThreadsUserID(ctx context.Context, userToken string) (st
 		"access_token": {userToken},
 		"fields":       {"id"},
 	}
-	result, err := m.graphGet(ctx, "/me", params)
+	result, err := m.GraphGet(ctx, "/me", params)
 	if err != nil {
 		return "", err
 	}
@@ -189,7 +189,7 @@ func (m *MetaClient) GetUserProfile(ctx context.Context, userToken string) (*Use
 		"access_token": {userToken},
 		"fields":       {"id,name,picture.width(200).height(200)"},
 	}
-	result, err := m.graphGet(ctx, "/me", params)
+	result, err := m.GraphGet(ctx, "/me", params)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +216,7 @@ type UserProfile struct {
 // GetTokenPermissions returns the list of granted permissions for a token
 func (m *MetaClient) GetTokenPermissions(ctx context.Context, token string) ([]string, error) {
 	params := url.Values{"access_token": {token}}
-	data, err := m.graphGet(ctx, "/me/permissions", params)
+	data, err := m.GraphGet(ctx, "/me/permissions", params)
 	if err != nil {
 		return nil, err
 	}
