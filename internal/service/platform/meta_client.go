@@ -112,6 +112,18 @@ func (m *MetaClient) ExchangeToken(ctx context.Context, appID, appSecret, shortT
 
 // GetUserPages returns Facebook Pages the user manages
 func (m *MetaClient) GetUserPages(ctx context.Context, userToken string) ([]PageInfo, error) {
+	// First try without access_token field to see if pages exist at all
+	debugParams := url.Values{
+		"access_token": {userToken},
+		"fields":       {"id,name"},
+	}
+	debugResult, debugErr := m.graphGet(ctx, "/me/accounts", debugParams)
+	if debugErr != nil {
+		log.Printf("[Meta] /me/accounts (no token field): err=%v", debugErr)
+	} else {
+		log.Printf("[Meta] /me/accounts (no token field): %v", debugResult)
+	}
+
 	params := url.Values{
 		"access_token": {userToken},
 		"fields":       {"id,name,access_token"},
