@@ -35,13 +35,13 @@ func (r *Router) Setup(engine *gin.Engine) {
 		})
 	})
 
-	// API Key 认证中间件
-	apiAuth := middleware.APIKeyAuth(r.cfg)
+	// JWT 认证中间件 (Walker IAM RS256 JWKS)
+	jwtAuth := middleware.JWTAuth()
 
 	v1 := engine.Group("/api/v1")
 	{
-		// 授权相关接口: 仅需 API Key (用于连接/查状态)
-		authGroup := v1.Group("/auth", apiAuth)
+		// Meta OAuth 绑定接口: 需要 JWT (登录用户绑定社交平台)
+		authGroup := v1.Group("/auth", jwtAuth)
 		{
 			authGroup.POST("/meta/connect", r.auth.MetaConnect)
 			authGroup.GET("/meta/status", r.auth.MetaStatus)
@@ -51,8 +51,8 @@ func (r *Router) Setup(engine *gin.Engine) {
 			authGroup.GET("/meta/callback", r.auth.MetaCallback)
 		}
 
-		// 业务接口: Phase A 仅需 API Key; Phase B 再加 Session Token
-		business := v1.Group("", apiAuth)
+		// 业务接口: 需要 JWT
+		business := v1.Group("", jwtAuth)
 		{
 			business.POST("/upload", r.upload.Upload)
 			business.POST("/ai/generate", r.ai.Generate)

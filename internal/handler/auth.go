@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/postpilot-dev/postpilot-server/internal/config"
+	"github.com/postpilot-dev/postpilot-server/internal/middleware"
 	"github.com/postpilot-dev/postpilot-server/internal/model"
 	"github.com/postpilot-dev/postpilot-server/internal/service/platform"
 	"gorm.io/gorm"
@@ -86,10 +87,11 @@ func NewAuthHandler(cfg *config.Config, client *platform.MetaClient, db *gorm.DB
 	return h
 }
 
-// restoreTokensFromDB loads saved platform accounts from DB into memory (self mode)
+// restoreTokensFromDB loads saved platform accounts from DB into memory
 func (h *AuthHandler) restoreTokensFromDB() {
 	var accounts []model.PlatformAccount
-	if err := h.db.Where("user_id = ?", 0).Find(&accounts).Error; err != nil {
+	// 查找所有平台账号（multi 模式后期按用户查询）
+	if err := h.db.Find(&accounts).Error; err != nil {
 		log.Printf("[Auth] restore tokens from DB: %v", err)
 		return
 	}
@@ -123,11 +125,11 @@ func (h *AuthHandler) restoreTokensFromDB() {
 	}
 }
 
-// savePlatformAccount upserts a platform account record (self mode: user_id=0)
-func (h *AuthHandler) savePlatformAccount(platformName, accountName, token string, expiresAt *time.Time, extra map[string]string) {
+// savePlatformAccount upserts a platform account record
+func (h *AuthHandler) savePlatformAccount(userID int64, platformName, accountName, token string, expiresAt *time.Time, extra map[string]string) {
 	extraJSON, _ := json.Marshal(extra)
 	acc := model.PlatformAccount{
-		UserID:               0, // self mode
+		UserID:               userID,
 		Platform:             platformName,
 		AccountName:          accountName,
 		AccessTokenEncrypted: token, // self 模式暂存明文，Phase B 加密
@@ -222,7 +224,7 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 			pageName = "Page:" + h.Tokens.PageID
 		}
 		h.Tokens.PageName = pageName
-		h.savePlatformAccount("facebook", pageName, h.Tokens.PageToken, &tokenExpiry, map[string]string{
+		h.savePlatformAccount(int64(middleware.GetUserID(c)), "facebook", pageName, h.Tokens.PageToken, &tokenExpiry, map[string]string{
 			"page_id":      h.Tokens.PageID,
 			"user_token":   longToken,
 			"user_name":    profile.Name,
@@ -243,7 +245,7 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 				igUser = igID
 			}
 			h.Tokens.IGUserID = igUser
-			h.savePlatformAccount("instagram", igUser, h.Tokens.PageToken, &tokenExpiry, map[string]string{
+			h.savePlatformAccount(int64(middleware.GetUserID(c)), "instagram", igUser, h.Tokens.PageToken, &tokenExpiry, map[string]string{
 				"ig_user_id": igID,
 				"page_id":    h.Tokens.PageID,
 			})
@@ -255,7 +257,7 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 			} else {
 				h.Tokens.IGUserID = igID
 				log.Printf("[Auth/Connect] IG business account: %s", igID)
-				h.savePlatformAccount("instagram", igID, h.Tokens.PageToken, &tokenExpiry, map[string]string{
+				h.savePlatformAccount(int64(middleware.GetUserID(c)), "instagram", igID, h.Tokens.PageToken, &tokenExpiry, map[string]string{
 					"ig_user_id": igID,
 					"page_id":    h.Tokens.PageID,
 				})
@@ -272,7 +274,7 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 	} else {
 		h.Tokens.ThreadsUID = threadsUID
 		log.Printf("[Auth/Connect] Threads user: %s", threadsUID)
-		h.savePlatformAccount("threads", threadsUID, longToken, &tokenExpiry, map[string]string{
+		h.savePlatformAccount(int64(middleware.GetUserID(c)), "threads", threadsUID, longToken, &tokenExpiry, map[string]string{
 			"threads_uid": threadsUID,
 		})
 	}
@@ -283,7 +285,7 @@ func (h *AuthHandler) MetaConnect(c *gin.Context) {
 		h.Tokens.PageName, h.Tokens.PageID, h.Tokens.IGUserID, h.Tokens.ThreadsUID, h.Tokens.UserName, h.SessionToken[:8])
 
 	// Save session token in facebook extra_data
-	h.savePlatformAccount("facebook", h.Tokens.PageName, h.Tokens.PageToken, &tokenExpiry, map[string]string{
+	h.savePlatformAccount(int64(middleware.GetUserID(c)), "facebook", h.Tokens.PageName, h.Tokens.PageToken, &tokenExpiry, map[string]string{
 		"page_id":       h.Tokens.PageID,
 		"user_token":    longToken,
 		"user_name":     profile.Name,
@@ -389,7 +391,7 @@ func (h *AuthHandler) MetaCallback(c *gin.Context) {
 	h.Tokens.PageToken = page.AccessToken
 
 	// Save Facebook/Page account to DB
-	h.savePlatformAccount("facebook", page.Name, page.AccessToken, &tokenExpiry, map[string]string{
+	h.savePlatformAccount(int64(middleware.GetUserID(c)), "facebook", page.Name, page.AccessToken, &tokenExpiry, map[string]string{
 		"page_id":      page.ID,
 		"user_token":   longToken,
 		"user_name":    profile.Name,
@@ -403,7 +405,7 @@ func (h *AuthHandler) MetaCallback(c *gin.Context) {
 	} else {
 		h.Tokens.IGUserID = igID
 		log.Printf("[Auth] IG business account: %s", igID)
-		h.savePlatformAccount("instagram", igID, page.AccessToken, &tokenExpiry, map[string]string{
+		h.savePlatformAccount(int64(middleware.GetUserID(c)), "instagram", igID, page.AccessToken, &tokenExpiry, map[string]string{
 			"ig_user_id": igID,
 			"page_id":    page.ID,
 		})
@@ -416,7 +418,7 @@ func (h *AuthHandler) MetaCallback(c *gin.Context) {
 	} else {
 		h.Tokens.ThreadsUID = threadsUID
 		log.Printf("[Auth] Threads user: %s", threadsUID)
-		h.savePlatformAccount("threads", threadsUID, longToken, &tokenExpiry, map[string]string{
+		h.savePlatformAccount(int64(middleware.GetUserID(c)), "threads", threadsUID, longToken, &tokenExpiry, map[string]string{
 			"threads_uid": threadsUID,
 		})
 	}
@@ -511,7 +513,8 @@ func (h *AuthHandler) MetaDisconnect(c *gin.Context) {
 	// Clear in-memory tokens
 	h.Tokens = &MetaTokens{}
 	// Clear DB records
-	if err := h.db.Where("user_id = ?", 0).Delete(&model.PlatformAccount{}).Error; err != nil {
+	userID := middleware.GetUserID(c)
+	if err := h.db.Where("user_id = ?", userID).Delete(&model.PlatformAccount{}).Error; err != nil {
 		log.Printf("[Auth/Disconnect] clear DB: %v", err)
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "disconnected"})

@@ -16,6 +16,7 @@ type Config struct {
 	Meta       MetaConfig     `mapstructure:"meta"`
 	Auth       AuthConfig     `mapstructure:"auth"`
 	Encryption EncryptConfig  `mapstructure:"encryption"`
+	IAM        IAMConfig      `mapstructure:"iam"`
 }
 
 type AppConfig struct {
@@ -78,6 +79,10 @@ type AuthConfig struct {
 
 type EncryptConfig struct {
 	AESKey string `mapstructure:"aes_key"`
+}
+
+type IAMConfig struct {
+	JWKSURL string `mapstructure:"jwks_url"`
 }
 
 func (c *Config) IsSelfMode() bool {

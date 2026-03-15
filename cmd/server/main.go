@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/postpilot-dev/postpilot-server/internal/config"
 	"github.com/postpilot-dev/postpilot-server/internal/handler"
+	"github.com/postpilot-dev/postpilot-server/internal/middleware"
 	"github.com/postpilot-dev/postpilot-server/internal/model"
 	"github.com/postpilot-dev/postpilot-server/internal/service"
 	"github.com/postpilot-dev/postpilot-server/internal/service/ai"
@@ -48,6 +49,13 @@ func main() {
 		log.Fatalf("auto migrate: %v", err)
 	}
 	log.Println("database migrated")
+
+	// 初始化 IAM JWKS 公钥 (RS256 验签)
+	if cfg.IAM.JWKSURL != "" {
+		if err := middleware.InitJWKS(cfg.IAM.JWKSURL); err != nil {
+			log.Printf("warning: JWKS init failed (IAM may not be running): %v", err)
+		}
+	}
 
 	// 初始化 S3
 	s3Service, err := storage.NewS3Service(cfg.S3)
