@@ -12,8 +12,8 @@
 # Output
 *.out
 
-# Dependency directories
-vendor/
+# Dependency directories (vendored for private repo build in prod)
+# vendor/
 
 # IDE
 .idea/

@@ -50,10 +50,10 @@ func main() {
 	}
 	log.Println("database migrated")
 
-	// 初始化 IAM JWKS 公钥 (RS256 验签)
+	// 初始化 IAM Verifier (RS256 JWKS via walker-iam-go SDK)
 	if cfg.IAM.JWKSURL != "" {
-		if err := middleware.InitJWKS(cfg.IAM.JWKSURL); err != nil {
-			log.Printf("warning: JWKS init failed (IAM may not be running): %v", err)
+		if err := middleware.InitIAMVerifier(cfg.IAM.JWKSURL); err != nil {
+			log.Printf("warning: IAM verifier init failed (IAM may not be running): %v", err)
 		}
 	}
 
